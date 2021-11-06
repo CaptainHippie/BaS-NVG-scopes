@@ -1,0 +1,87 @@
+local nvg_active
+local toggle = false
+local alt_wpn = false
+local nvg_scope
+
+local function zoom_in()
+local weapon = db.actor:active_item()
+	if weapon and SYS_GetParam(0, weapon:section(), "nv_scope_status") == "1" then
+		nvg_scope = true
+		RegisterScriptCallback("actor_on_update", bas_actor_on_update)
+		do_check()
+	else
+		nvg_scope = false
+		do_check()
+	end
+alt_wpn = SYS_GetParam(0, weapon:section(), "use_alt_aim_hud")
+end
+
+local tmr = 0
+function bas_actor_on_update()
+local tg = time_global()
+	if tg > tmr then
+		tmr = tg + 700
+		do_check()
+	end
+end
+
+function do_check()
+	if toggle and (not nvg_active) and nvg_scope and device().fov <= 40 then
+		activate()
+	elseif nvg_active and ((not toggle) or (not nvg_scope) or (device().fov > 40)) then
+		deactivate()
+	end
+end
+
+function activate()
+	get_console():execute("shader_param_8 " .. 11 .. ",0,0,0")
+	get_console():execute("r__nightvision 1")
+	nvg_active = true
+end
+
+function deactivate()
+	get_console():execute("shader_param_8 (0,0,0,0")
+	get_console():execute("r__nightvision 0")
+	nvg_active = false
+end
+
+local function zoom_out()
+	deactivate()
+	UnregisterScriptCallback("actor_on_update", bas_actor_on_update)
+end
+
+local function switching_sight(key)
+local bind = dik_to_bind(key)
+	if (bind == key_bindings.kCUSTOM21) and alt_wpn and nvg_active then
+		get_console():execute("r__nightvision 0")
+		get_console():execute("shader_param_8 (0,0,0,0")
+		nvg_active = false
+	end
+end
+
+local function on_key_release(key)
+	if key ~= switch then return end
+	toggle = not toggle
+	do_check()
+	if toggle then
+		xr_effects.play_snd(db.actor, nil, {[1] = "weapons\\vintorez\\1pn93_nv_start"})
+	else xr_effects.play_snd(db.actor, nil, {[1] = "weapons\\vintorez\\1pn93_nv_off"})
+	end
+end
+
+local function save_state(mdata)
+	mdata.snk_bas_nvg_flag = toggle
+end
+
+local function load_state(mdata)
+	toggle = mdata.snk_bas_nvg_flag or false
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_weapon_zoom_in", zoom_in)
+	RegisterScriptCallback("actor_on_weapon_zoom_out", zoom_out)
+	RegisterScriptCallback("on_key_release", on_key_release)
+	RegisterScriptCallback("on_key_press", switching_sight)
+	RegisterScriptCallback("save_state", save_state)
+	RegisterScriptCallback("load_state", load_state)
+end
